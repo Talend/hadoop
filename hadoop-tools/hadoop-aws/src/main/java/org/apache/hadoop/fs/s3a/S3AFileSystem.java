@@ -18,6 +18,10 @@
 
 package org.apache.hadoop.fs.s3a;
 
+import com.amazonaws.services.s3.model.GetObjectMetadataRequest;
+import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
+import com.amazonaws.services.s3.model.SSEAwsKeyManagementParams;
+import com.amazonaws.services.s3.model.SSECustomerKey;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -26,6 +30,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -70,6 +75,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.util.Progressable;
 
 import static org.apache.hadoop.fs.s3a.Constants.*;
+import static org.apache.hadoop.fs.s3a.S3AUtils.getServerSideEncryptionKey;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -90,7 +96,7 @@ public class S3AFileSystem extends FileSystem {
   private int multiPartThreshold;
   public static final Logger LOG = LoggerFactory.getLogger(S3AFileSystem.class);
   private CannedAccessControlList cannedACL;
-  private String serverSideEncryptionAlgorithm;
+  private S3AEncryptionMethods serverSideEncryptionAlgorithm;
 
   // The maximum number of entries that can be deleted in any call to s3
   private static final int MAX_ENTRIES_TO_DELETE = 1000;
@@ -309,7 +315,18 @@ public class S3AFileSystem extends FileSystem {
       transfers.abortMultipartUploads(bucket, purgeBefore);
     }
 
-    serverSideEncryptionAlgorithm = conf.get(SERVER_SIDE_ENCRYPTION_ALGORITHM);
+    serverSideEncryptionAlgorithm = S3AEncryptionMethods.getMethod(
+        conf.getTrimmed(SERVER_SIDE_ENCRYPTION_ALGORITHM));
+    if(S3AEncryptionMethods.SSE_C.equals(serverSideEncryptionAlgorithm) &&
+        StringUtils.isBlank(getServerSideEncryptionKey(getConf()))) {
+      throw new IOException(Constants.SSE_C_NO_KEY_ERROR);
+    }
+    if(S3AEncryptionMethods.SSE_S3.equals(serverSideEncryptionAlgorithm) &&
+        StringUtils.isNotBlank(getServerSideEncryptionKey(
+            getConf()))) {
+      throw new IOException(Constants.SSE_S3_WITH_KEY_ERROR);
+    }
+    LOG.debug("Using encryption {}", serverSideEncryptionAlgorithm);
 
     setConf(conf);
   }
@@ -320,7 +337,7 @@ public class S3AFileSystem extends FileSystem {
    * @return "s3a"
    */
   public String getScheme() {
-    return "s3a";
+    return Constants.FS_S3A;
   }
 
   /** Returns a URI whose scheme and authority identify this FileSystem.*/
@@ -375,8 +392,15 @@ public class S3AFileSystem extends FileSystem {
       throw new FileNotFoundException("Can't open " + f + " because it is a directory");
     }
 
-    return new FSDataInputStream(new S3AInputStream(bucket, pathToKey(f), 
-      fileStatus.getLen(), s3, statistics));
+    return new FSDataInputStream(
+        new S3AInputStream(new S3ObjectAttributes(
+            bucket,
+            pathToKey(f),
+            serverSideEncryptionAlgorithm,
+            getServerSideEncryptionKey(getConf())),
+            fileStatus.getLen(),
+            s3,
+            statistics));
   }
 
   /**
@@ -594,6 +618,99 @@ public class S3AFileSystem extends FileSystem {
     }
     return true;
   }
+
+  /**
+   * Low-level call to get at the object metadata.
+   * @param path path to the object
+   * @return metadata
+   * @throws IOException IO and object access problems.
+   */
+  @VisibleForTesting
+  public ObjectMetadata getObjectMetadata(Path path) throws IOException {
+    return getObjectMetadata(pathToKey(path));
+  }
+
+  /**
+   * Create a putObject request.
+   * Adds the ACL and metadata
+   * @param key key of object
+   * @param metadata metadata header
+   * @param srcfile source file
+   * @return the request
+   */
+  public PutObjectRequest newPutObjectRequest(String key,
+      ObjectMetadata metadata, File srcfile) {
+    PutObjectRequest putObjectRequest = new PutObjectRequest(bucket, key,
+        srcfile);
+    setOptionalPutRequestParameters(putObjectRequest);
+    putObjectRequest.setCannedAcl(cannedACL);
+    putObjectRequest.setMetadata(metadata);
+    return putObjectRequest;
+  }
+
+  /**
+   * Create a {@link PutObjectRequest} request.
+   * The metadata is assumed to have been configured with the size of the
+   * operation.
+   * @param key key of object
+   * @param metadata metadata header
+   * @param inputStream source data.
+   * @return the request
+   */
+  PutObjectRequest newPutObjectRequest(String key,
+      ObjectMetadata metadata, InputStream inputStream) {
+    PutObjectRequest putObjectRequest = new PutObjectRequest(bucket, key,
+        inputStream, metadata);
+    setOptionalPutRequestParameters(putObjectRequest);
+    putObjectRequest.setCannedAcl(cannedACL);
+    return putObjectRequest;
+  }
+
+  /**
+   * Create a new object metadata instance.
+   * Any standard metadata headers are added here, for example:
+   * encryption.
+   * @return a new metadata instance
+   */
+  public ObjectMetadata newObjectMetadata() {
+    final ObjectMetadata om = new ObjectMetadata();
+    setOptionalObjectMetadata(om);
+    return om;
+  }
+
+  /**
+   * Create a new object metadata instance.
+   * Any standard metadata headers are added here, for example:
+   * encryption.
+   *
+   * @param length length of data to set in header.
+   * @return a new metadata instance
+   */
+  public ObjectMetadata newObjectMetadata(long length) {
+    final ObjectMetadata om = newObjectMetadata();
+    if (length >= 0) {
+      om.setContentLength(length);
+    }
+    return om;
+  }
+
+  /**
+   * Request object metadata; increments counters in the process.
+   * @param key key
+   * @return the metadata
+   */
+  protected ObjectMetadata getObjectMetadata(String key) {
+    GetObjectMetadataRequest request =
+        new GetObjectMetadataRequest(bucket, key);
+    //SSE-C requires to be filled in if enabled for object metadata
+    if(S3AEncryptionMethods.SSE_C.equals(serverSideEncryptionAlgorithm) &&
+        StringUtils.isNotBlank(getServerSideEncryptionKey(getConf()))){
+      request.setSSECustomerKey(generateSSECustomerKey());
+    }
+    ObjectMetadata meta = s3.getObjectMetadata(request);
+    return meta;
+  }
+
 
   /** Delete a file.
    *
@@ -889,7 +1006,7 @@ public class S3AFileSystem extends FileSystem {
 
     if (!key.isEmpty()) {
       try {
-        ObjectMetadata meta = s3.getObjectMetadata(bucket, key);
+        ObjectMetadata meta = getObjectMetadata(key);
         statistics.incrementReadOps(1);
 
         if (objectRepresentsDirectory(key, meta.getContentLength())) {
@@ -920,7 +1037,7 @@ public class S3AFileSystem extends FileSystem {
       if (!key.endsWith("/")) {
         try {
           String newKey = key + "/";
-          ObjectMetadata meta = s3.getObjectMetadata(bucket, newKey);
+          ObjectMetadata meta = getObjectMetadata(newKey);
           statistics.incrementReadOps(1);
 
           if (objectRepresentsDirectory(newKey, meta.getContentLength())) {
@@ -1022,11 +1139,8 @@ public class S3AFileSystem extends FileSystem {
     LocalFileSystem local = getLocal(getConf());
     File srcfile = local.pathToFile(src);
 
-    final ObjectMetadata om = new ObjectMetadata();
-    if (StringUtils.isNotBlank(serverSideEncryptionAlgorithm)) {
-      om.setServerSideEncryption(serverSideEncryptionAlgorithm);
-    }
-    PutObjectRequest putObjectRequest = new PutObjectRequest(bucket, key, srcfile);
+    final ObjectMetadata om = newObjectMetadata();
+    PutObjectRequest putObjectRequest = newPutObjectRequest(key, om, srcfile);
     putObjectRequest.setCannedAcl(cannedACL);
     putObjectRequest.setMetadata(om);
 
@@ -1085,12 +1199,12 @@ public class S3AFileSystem extends FileSystem {
       LOG.debug("copyFile " + srcKey + " -> " + dstKey);
     }
 
-    ObjectMetadata srcom = s3.getObjectMetadata(bucket, srcKey);
-    final ObjectMetadata dstom = srcom.clone();
-    if (StringUtils.isNotBlank(serverSideEncryptionAlgorithm)) {
-      dstom.setServerSideEncryption(serverSideEncryptionAlgorithm);
-    }
+    ObjectMetadata srcom = getObjectMetadata(srcKey);
+    ObjectMetadata dstom = cloneObjectMetadata(srcom);
+    setOptionalObjectMetadata(dstom);
+
     CopyObjectRequest copyObjectRequest = new CopyObjectRequest(bucket, srcKey, bucket, dstKey);
+    setOptionalCopyObjectRequestParameters(copyObjectRequest);
     copyObjectRequest.setCannedAccessControlList(cannedACL);
     copyObjectRequest.setNewObjectMetadata(dstom);
 
@@ -1127,6 +1241,82 @@ public class S3AFileSystem extends FileSystem {
     }
 
     return date.getTime();
+  }
+
+  protected void setOptionalMultipartUploadRequestParameters(
+      InitiateMultipartUploadRequest req) {
+    switch (serverSideEncryptionAlgorithm) {
+      case SSE_KMS:
+        req.setSSEAwsKeyManagementParams(generateSSEAwsKeyParams());
+        break;
+      case SSE_C:
+        if (StringUtils.isNotBlank(getServerSideEncryptionKey(getConf()))) {
+          //at the moment, only supports copy using the same key
+          req.setSSECustomerKey(generateSSECustomerKey());
+        }
+        break;
+      default:
+    }
+  }
+
+  protected void setOptionalCopyObjectRequestParameters(
+      CopyObjectRequest copyObjectRequest) throws IOException {
+    switch (serverSideEncryptionAlgorithm) {
+      case SSE_KMS:
+        copyObjectRequest.setSSEAwsKeyManagementParams(
+            generateSSEAwsKeyParams()
+        );
+        break;
+      case SSE_C:
+        if (StringUtils.isNotBlank(getServerSideEncryptionKey(getConf()))) {
+          //at the moment, only supports copy using the same key
+          SSECustomerKey customerKey = generateSSECustomerKey();
+          copyObjectRequest.setSourceSSECustomerKey(customerKey);
+          copyObjectRequest.setDestinationSSECustomerKey(customerKey);
+        }
+        break;
+      default:
+    }
+  }
+
+  protected void setOptionalPutRequestParameters(PutObjectRequest request) {
+    switch (serverSideEncryptionAlgorithm) {
+      case SSE_KMS:
+        request.setSSEAwsKeyManagementParams(generateSSEAwsKeyParams());
+        break;
+      case SSE_C:
+        if (StringUtils.isNotBlank(getServerSideEncryptionKey(getConf()))) {
+          request.setSSECustomerKey(generateSSECustomerKey());
+        }
+        break;
+      default:
+    }
+  }
+
+  private void setOptionalObjectMetadata(ObjectMetadata metadata) {
+    if (S3AEncryptionMethods.SSE_S3.equals(serverSideEncryptionAlgorithm)) {
+      metadata.setSSEAlgorithm(serverSideEncryptionAlgorithm.getMethod());
+    }
+  }
+
+  private SSEAwsKeyManagementParams generateSSEAwsKeyParams() {
+    //Use specified key, otherwise default to default master aws/s3 key by AWS
+    SSEAwsKeyManagementParams sseAwsKeyManagementParams =
+        new SSEAwsKeyManagementParams();
+    if (StringUtils.isNotBlank(getServerSideEncryptionKey(getConf()))) {
+      sseAwsKeyManagementParams =
+          new SSEAwsKeyManagementParams(
+              getServerSideEncryptionKey(getConf())
+          );
+    }
+    return sseAwsKeyManagementParams;
+  }
+
+  private SSECustomerKey generateSSECustomerKey() {
+    SSECustomerKey customerKey = new SSECustomerKey(
+        getServerSideEncryptionKey(getConf())
+    );
+    return customerKey;
   }
 
   public void finishedWrite(String key) throws IOException {
@@ -1181,15 +1371,76 @@ public class S3AFileSystem extends FileSystem {
       }
     };
 
-    final ObjectMetadata om = new ObjectMetadata();
+    final ObjectMetadata om = newObjectMetadata();
     om.setContentLength(0L);
-    if (StringUtils.isNotBlank(serverSideEncryptionAlgorithm)) {
-      om.setServerSideEncryption(serverSideEncryptionAlgorithm);
-    }
-    PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, objectName, im, om);
+    PutObjectRequest putObjectRequest = newPutObjectRequest(objectName, om, im);
     putObjectRequest.setCannedAcl(cannedACL);
     s3.putObject(putObjectRequest);
     statistics.incrementWriteOps(1);
+  }
+
+  /**
+   * Creates a copy of the passed {@link ObjectMetadata}.
+   * Does so without using the {@link ObjectMetadata#clone()} method,
+   * to avoid copying unnecessary headers.
+   * @param source the {@link ObjectMetadata} to copy
+   * @return a copy of {@link ObjectMetadata} with only relevant attributes
+   */
+  private ObjectMetadata cloneObjectMetadata(ObjectMetadata source) {
+    // This approach may be too brittle, especially if
+    // in future there are new attributes added to ObjectMetadata
+    // that we do not explicitly call to set here
+    ObjectMetadata ret = newObjectMetadata(source.getContentLength());
+
+    // Possibly null attributes
+    // Allowing nulls to pass breaks it during later use
+    if (source.getCacheControl() != null) {
+      ret.setCacheControl(source.getCacheControl());
+    }
+    if (source.getContentDisposition() != null) {
+      ret.setContentDisposition(source.getContentDisposition());
+    }
+    if (source.getContentEncoding() != null) {
+      ret.setContentEncoding(source.getContentEncoding());
+    }
+    if (source.getContentMD5() != null) {
+      ret.setContentMD5(source.getContentMD5());
+    }
+    if (source.getContentType() != null) {
+      ret.setContentType(source.getContentType());
+    }
+    if (source.getExpirationTime() != null) {
+      ret.setExpirationTime(source.getExpirationTime());
+    }
+    if (source.getExpirationTimeRuleId() != null) {
+      ret.setExpirationTimeRuleId(source.getExpirationTimeRuleId());
+    }
+    if (source.getHttpExpiresDate() != null) {
+      ret.setHttpExpiresDate(source.getHttpExpiresDate());
+    }
+    if (source.getLastModified() != null) {
+      ret.setLastModified(source.getLastModified());
+    }
+    if (source.getOngoingRestore() != null) {
+      ret.setOngoingRestore(source.getOngoingRestore());
+    }
+    if (source.getRestoreExpirationTime() != null) {
+      ret.setRestoreExpirationTime(source.getRestoreExpirationTime());
+    }
+    if (source.getSSEAlgorithm() != null) {
+      ret.setSSEAlgorithm(source.getSSEAlgorithm());
+    }
+    if (source.getSSECustomerAlgorithm() != null) {
+      ret.setSSECustomerAlgorithm(source.getSSECustomerAlgorithm());
+    }
+    if (source.getSSECustomerKeyMd5() != null) {
+      ret.setSSECustomerKeyMd5(source.getSSECustomerKeyMd5());
+    }
+
+    for (Map.Entry<String, String> e : source.getUserMetadata().entrySet()) {
+      ret.addUserMetadata(e.getKey(), e.getValue());
+    }
+    return ret;
   }
 
   /**

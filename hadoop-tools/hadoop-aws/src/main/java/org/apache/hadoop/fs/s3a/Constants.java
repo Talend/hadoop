@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.fs.s3a;
 
+import org.apache.hadoop.classification.InterfaceAudience;
+
 public class Constants {
   // s3 access key
   public static final String ACCESS_KEY = "fs.s3a.access.key";
@@ -108,11 +110,41 @@ public class Constants {
   public static final String PURGE_EXISTING_MULTIPART_AGE = "fs.s3a.multipart.purge.age";
   public static final long DEFAULT_PURGE_EXISTING_MULTIPART_AGE = 14400;
 
-  // s3 server-side encryption
-  public static final String SERVER_SIDE_ENCRYPTION_ALGORITHM = 
-    "fs.s3a.server-side-encryption-algorithm";
-  
+  // s3 server-side encryption, see S3AEncryptionMethods for valid options
+  public static final String SERVER_SIDE_ENCRYPTION_ALGORITHM =
+      "fs.s3a.server-side-encryption-algorithm";
+
+  /**
+   * The standard encryption algorithm AWS supports.
+   * Different implementations may support others (or none).
+   * Use the S3AEncryptionMethods instead when configuring
+   * which Server Side Encryption to use.
+   */
+  @Deprecated
+  public static final String SERVER_SIDE_ENCRYPTION_AES256 =
+      "AES256";
+
+  /**
+   *  Used to specify which AWS KMS key to use if
+   *  SERVER_SIDE_ENCRYPTION_ALGORITHM is AWS_KMS (will default to aws/s3
+   *  master key if left blank) or with SSE_C, the actual AES 256 key.
+   */
+  public static final String SERVER_SIDE_ENCRYPTION_KEY =
+      "fs.s3a.server-side-encryption-key";
+
   public static final String S3N_FOLDER_SUFFIX = "_$folder$";
   public static final String FS_S3A_BLOCK_SIZE = "fs.s3a.block.size";
-  public static final String FS_S3A = "s3a";
+
+  // Modified.
+  public static final String FS_S3A = "s3t";
+
+
+  @InterfaceAudience.Private
+  public static final String SSE_C_NO_KEY_ERROR = S3AEncryptionMethods.SSE_C
+      .getMethod() +" is enabled and no encryption key is provided.";
+
+
+  @InterfaceAudience.Private
+  public static final String SSE_S3_WITH_KEY_ERROR = S3AEncryptionMethods.SSE_S3
+      .getMethod() +" is configured and an " + "encryption key is provided";
 }

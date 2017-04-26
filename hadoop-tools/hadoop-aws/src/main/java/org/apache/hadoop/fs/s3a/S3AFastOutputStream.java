@@ -76,7 +76,7 @@ public class S3AFastOutputStream extends OutputStream {
   private final S3AFileSystem fs;
   private final CannedAccessControlList cannedACL;
   private final FileSystem.Statistics statistics;
-  private final String serverSideEncryptionAlgorithm;
+  private final S3AEncryptionMethods serverSideEncryptionAlgorithm;
   private final ProgressListener progressListener;
   private final ListeningExecutorService executorService;
   private MultiPartUpload multiPartUpload;
@@ -107,7 +107,7 @@ public class S3AFastOutputStream extends OutputStream {
   public S3AFastOutputStream(AmazonS3Client client, S3AFileSystem fs,
       String bucket, String key, Progressable progress,
       FileSystem.Statistics statistics, CannedAccessControlList cannedACL,
-      String serverSideEncryptionAlgorithm, long partSize,
+      S3AEncryptionMethods serverSideEncryptionAlgorithm, long partSize,
       long multiPartThreshold, ThreadPoolExecutor threadPoolExecutor)
       throws IOException {
     this.bucket = bucket;
@@ -265,10 +265,7 @@ public class S3AFastOutputStream extends OutputStream {
   }
 
   private ObjectMetadata createDefaultMetadata() {
-    ObjectMetadata om = new ObjectMetadata();
-    if (StringUtils.isNotBlank(serverSideEncryptionAlgorithm)) {
-      om.setServerSideEncryption(serverSideEncryptionAlgorithm);
-    }
+    ObjectMetadata om = fs.newObjectMetadata();
     return om;
   }
 

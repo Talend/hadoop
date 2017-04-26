@@ -57,14 +57,14 @@ public class S3AOutputStream extends OutputStream {
   private CannedAccessControlList cannedACL;
   private FileSystem.Statistics statistics;
   private LocalDirAllocator lDirAlloc;
-  private String serverSideEncryptionAlgorithm;
+  private S3AEncryptionMethods serverSideEncryptionAlgorithm;
 
   public static final Logger LOG = S3AFileSystem.LOG;
 
   public S3AOutputStream(Configuration conf, TransferManager transfers,
     S3AFileSystem fs, String bucket, String key, Progressable progress, 
     CannedAccessControlList cannedACL, FileSystem.Statistics statistics, 
-    String serverSideEncryptionAlgorithm)
+    S3AEncryptionMethods serverSideEncryptionAlgorithm)
       throws IOException {
     this.bucket = bucket;
     this.key = key;
@@ -114,11 +114,8 @@ public class S3AOutputStream extends OutputStream {
 
 
     try {
-      final ObjectMetadata om = new ObjectMetadata();
-      if (StringUtils.isNotBlank(serverSideEncryptionAlgorithm)) {
-        om.setServerSideEncryption(serverSideEncryptionAlgorithm);
-      }
-      PutObjectRequest putObjectRequest = new PutObjectRequest(bucket, key, backupFile);
+      final ObjectMetadata om = fs.newObjectMetadata();
+      PutObjectRequest putObjectRequest = fs.newPutObjectRequest(key, om, backupFile);
       putObjectRequest.setCannedAcl(cannedACL);
       putObjectRequest.setMetadata(om);
 

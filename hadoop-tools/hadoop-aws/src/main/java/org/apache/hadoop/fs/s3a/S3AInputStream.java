@@ -22,6 +22,8 @@ import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectInputStream;
+import com.amazonaws.services.s3.model.SSECustomerKey;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -42,19 +44,24 @@ public class S3AInputStream extends FSInputStream {
   private String bucket;
   private String key;
   private long contentLength;
+  private S3AEncryptionMethods serverSideEncryptionAlgorithm;
+  private String serverSideEncryptionKey;
   public static final Logger LOG = S3AFileSystem.LOG;
   public static final long CLOSE_THRESHOLD = 4096;
 
-  public S3AInputStream(String bucket, String key, long contentLength, AmazonS3Client client,
+  public S3AInputStream(S3ObjectAttributes s3Attributes, long contentLength, AmazonS3Client client,
                         FileSystem.Statistics stats) {
-    this.bucket = bucket;
-    this.key = key;
+    this.bucket = s3Attributes.getBucket();
+    this.key = s3Attributes.getKey();
     this.contentLength = contentLength;
     this.client = client;
     this.stats = stats;
     this.pos = 0;
     this.closed = false;
     this.wrappedStream = null;
+    this.serverSideEncryptionAlgorithm =
+        s3Attributes.getServerSideEncryptionAlgorithm();
+    this.serverSideEncryptionKey = s3Attributes.getServerSideEncryptionKey();
   }
 
   private void openIfNeeded() throws IOException {
@@ -87,6 +94,11 @@ public class S3AInputStream extends FSInputStream {
 
     GetObjectRequest request = new GetObjectRequest(bucket, key);
     request.setRange(pos, contentLength-1);
+    if (S3AEncryptionMethods.SSE_C.equals(serverSideEncryptionAlgorithm) &&
+        StringUtils.isNotBlank(serverSideEncryptionKey)){
+      request.setSSECustomerKey(new SSECustomerKey(serverSideEncryptionKey));
+    }
+
 
     wrappedStream = client.getObject(request).getObjectContent();
 
