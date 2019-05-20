@@ -42,6 +42,7 @@ import com.amazonaws.AmazonServiceException;
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.Protocol;
 import com.amazonaws.auth.AWSCredentialsProviderChain;
+import com.amazonaws.auth.AWSCredentials;
 
 import com.amazonaws.auth.InstanceProfileCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3Client;
@@ -177,11 +178,16 @@ public class S3AFileSystem extends FileSystem {
       }
     }
 
-    AWSCredentialsProviderChain credentials = new AWSCredentialsProviderChain(
-        new BasicAWSCredentialsProvider(accessKey, secretKey),
-        new InstanceProfileCredentialsProvider(),
-        new AnonymousAWSCredentialsProvider()
-    );
+    AWSCredentials credentials = null;
+    try {
+      credentials = new AWSCredentialsProviderChain(
+          new BasicAWSCredentialsProvider(accessKey, secretKey),
+          new InstanceProfileCredentialsProvider()
+      ).getCredentials();
+    } catch (AmazonClientException e) {
+      credentials = new AnonymousAWSCredentialsProvider().getCredentials();
+    }
+    
 
     bucket = name.getHost();
 
