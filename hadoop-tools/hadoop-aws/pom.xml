@@ -22,8 +22,8 @@
     <version>2.7.3</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
-  <artifactId>hadoop-aws</artifactId>
-  <version>2.7.3</version>
+  <artifactId>hadoop-aws-tlnd</artifactId>
+  <version>2.7.3.2</version>
   <name>Apache Hadoop Amazon Web Services support</name>
   <description>
     This module contains code to support integration with Amazon Web Services.
@@ -34,7 +34,35 @@
   <properties>
     <file.encoding>UTF-8</file.encoding>
     <downloadSources>true</downloadSources>
+    <!-- we only want to build the hadoop aws with some code fix, and release one patch version. For avoiding to build the whole hadoop, we use this property to decide other hadoop jar's version which use-->
+    <!-- the build command at local : mvn clean install -Denforcer.skip=true -->
+    <!-- the command in jenkins for auto deploy : mvn clean -U -V deploy -Denforcer.skip=true -->
+    <hadoop.version_for_build>2.7.3</hadoop.version_for_build>
+    <talend.nexus.url>https://artifacts-oss.talend.com</talend.nexus.url>
   </properties>
+  
+  <distributionManagement>
+      <snapshotRepository>
+          <id>talend_nexus_deployment</id>
+          <url>${talend.nexus.url}/nexus/content/repositories/TalendOpenSourceSnapshot/</url>
+          <snapshots>
+              <enabled>true</enabled>
+          </snapshots>
+          <releases>
+              <enabled>false</enabled>
+          </releases>
+      </snapshotRepository>
+      <repository>
+          <id>talend_nexus_deployment</id>
+          <url>${talend.nexus.url}/nexus/content/repositories/TalendOpenSourceRelease/</url>
+          <snapshots>
+              <enabled>false</enabled>
+          </snapshots>
+          <releases>
+              <enabled>true</enabled>
+          </releases>
+      </repository>
+  </distributionManagement>
 
   <profiles>
     <profile>
@@ -75,6 +103,32 @@
           <effort>Max</effort>
         </configuration>
       </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-remote-resources-plugin</artifactId>
+        <version>${maven-remote-resources-plugin.version}</version>
+        <configuration>
+          <resourceBundles>
+            <resourceBundle>org.apache.hadoop:hadoop-build-tools:${hadoop.version_for_build}</resourceBundle>
+          </resourceBundles>
+        </configuration>
+        <dependencies>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-build-tools</artifactId>
+            <version>${hadoop.version_for_build}</version>
+          </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <goals>
+              <goal>process</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-project-info-reports-plugin</artifactId>
@@ -150,12 +204,26 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
+      <version>${hadoop.version_for_build}</version>
       <scope>compile</scope>
     </dependency>
 
     <dependency>
       <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-annotations</artifactId>
+      <version>${hadoop.version_for_build}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-auth</artifactId>
+      <version>${hadoop.version_for_build}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
+      <version>${hadoop.version_for_build}</version>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
