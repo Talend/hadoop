@@ -31,6 +31,8 @@ public class Constants {
   public static final String MAXIMUM_CONNECTIONS = "fs.s3a.connection.maximum";
   public static final int DEFAULT_MAXIMUM_CONNECTIONS = 15;
   
+  public static final String USER_AGENT = "fs.s3a.user.agent";
+  
   // connect to s3 over ssl?
   public static final String SECURE_CONNECTIONS = "fs.s3a.connection.ssl.enabled";
   public static final boolean DEFAULT_SECURE_CONNECTIONS = true;

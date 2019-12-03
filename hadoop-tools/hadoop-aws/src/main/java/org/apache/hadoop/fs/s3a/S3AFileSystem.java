@@ -192,6 +192,12 @@ public class S3AFileSystem extends FileSystem {
     bucket = name.getHost();
 
     ClientConfiguration awsConf = new ClientConfiguration();
+    
+    String userAgent = conf.getTrimmed(USER_AGENT, "");
+    if(!userAgent.isEmpty()) {
+      awsConf.setUserAgent(userAgent);
+    }
+      
     awsConf.setMaxConnections(conf.getInt(MAXIMUM_CONNECTIONS, 
       DEFAULT_MAXIMUM_CONNECTIONS));
     boolean secureConnections = conf.getBoolean(SECURE_CONNECTIONS,
