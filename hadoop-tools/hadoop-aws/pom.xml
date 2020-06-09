@@ -23,7 +23,7 @@
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <artifactId>hadoop-aws-tlnd</artifactId>
-  <version>2.7.3.3</version>
+  <version>2.7.3.8</version>
   <name>Apache Hadoop Amazon Web Services support</name>
   <description>
     This module contains code to support integration with Amazon Web Services.
@@ -39,6 +39,7 @@
     <!-- the command in jenkins for auto deploy : mvn clean -U -V deploy -Denforcer.skip=true -->
     <hadoop.version_for_build>2.7.3</hadoop.version_for_build>
     <talend.nexus.url>https://artifacts-oss.talend.com</talend.nexus.url>
+    <enforcer.skip>true</enforcer.skip>
   </properties>
   
   <distributionManagement>
@@ -241,7 +242,7 @@
     <dependency>
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-java-sdk-s3</artifactId>
-      <version>1.10.6</version>
+      <version>1.11.729</version>
       <scope>compile</scope>
     </dependency>
 

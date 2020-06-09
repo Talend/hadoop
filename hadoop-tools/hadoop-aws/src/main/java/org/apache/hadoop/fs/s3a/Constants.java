@@ -27,6 +27,9 @@ public class Constants {
   // s3 secret key
   public static final String SECRET_KEY = "fs.s3a.secret.key";
 
+  // sts session token
+  public static final String STS_SESSION_TOKEN = "fs.s3a.sts.token";
+
   // number of simultaneous connections to s3
   public static final String MAXIMUM_CONNECTIONS = "fs.s3a.connection.maximum";
   public static final int DEFAULT_MAXIMUM_CONNECTIONS = 15;

@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.fs.s3a;
 
+import com.amazonaws.auth.*;
 import com.amazonaws.services.s3.model.GetObjectMetadataRequest;
 import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
 import com.amazonaws.services.s3.model.SSEAwsKeyManagementParams;
@@ -41,10 +42,7 @@ import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.Protocol;
-import com.amazonaws.auth.AWSCredentialsProviderChain;
-import com.amazonaws.auth.AWSCredentials;
 
-import com.amazonaws.auth.InstanceProfileCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
@@ -167,6 +165,8 @@ public class S3AFileSystem extends FileSystem {
     String accessKey = conf.get(ACCESS_KEY, null);
     String secretKey = conf.get(SECRET_KEY, null);
 
+    String stsToken = conf.get(STS_SESSION_TOKEN, null);
+
     String userInfo = name.getUserInfo();
     if (userInfo != null) {
       int index = userInfo.indexOf(':');
@@ -181,7 +181,7 @@ public class S3AFileSystem extends FileSystem {
     AWSCredentials credentials = null;
     try {
       credentials = new AWSCredentialsProviderChain(
-          new BasicAWSCredentialsProvider(accessKey, secretKey),
+          new AWSStaticCredentialsProvider(new BasicSessionCredentials(accessKey, secretKey, stsToken)),
           new InstanceProfileCredentialsProvider()
       ).getCredentials();
     } catch (AmazonClientException e) {
