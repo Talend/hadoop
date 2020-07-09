@@ -39,7 +39,6 @@
     <!-- the command in jenkins for auto deploy : mvn clean -U -V deploy -Denforcer.skip=true -->
     <hadoop.version_for_build>2.7.3</hadoop.version_for_build>
     <talend.nexus.url>https://artifacts-oss.talend.com</talend.nexus.url>
-    <enforcer.skip>true</enforcer.skip>
   </properties>
   
   <distributionManagement>
@@ -260,11 +259,5 @@
       <scope>test</scope>
     </dependency>
 
-    <dependency>
-      <groupId>org.projectlombok</groupId>
-      <artifactId>lombok</artifactId>
-      <version>1.18.8</version>
-      <scope>provided</scope>
-    </dependency>
   </dependencies>
 </project>
