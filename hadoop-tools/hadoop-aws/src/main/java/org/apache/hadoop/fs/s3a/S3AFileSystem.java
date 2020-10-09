@@ -1473,12 +1473,12 @@ public class S3AFileSystem extends FileSystem {
   }
 
   private void printAmazonServiceException(AmazonServiceException ase) {
-    LOG.info("Caught an AmazonServiceException {}", ase.toString());
-    LOG.info("Error Message: {}", ase.getMessage());
-    LOG.info("HTTP Status Code: {}", ase.getStatusCode());
-    LOG.info("AWS Error Code: {}", ase.getErrorCode());
-    LOG.info("Error Type: {}", ase.getErrorType());
-    LOG.info("Request ID: {}", ase.getRequestId());
-    LOG.info("Stack", ase);
+    LOG.debug("Caught an AmazonServiceException {}", ase.toString());
+    LOG.debug("Error Message: {}", ase.getMessage());
+    LOG.debug("HTTP Status Code: {}", ase.getStatusCode());
+    LOG.debug("AWS Error Code: {}", ase.getErrorCode());
+    LOG.debug("Error Type: {}", ase.getErrorType());
+    LOG.debug("Request ID: {}", ase.getRequestId());
+    LOG.debug("Stack", ase);
   }
 }
