@@ -23,7 +23,7 @@
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <artifactId>hadoop-aws-tlnd</artifactId>
-  <version>2.7.3.5-SNAPSHOT</version>
+  <version>2.7.3.5</version>
   <name>Apache Hadoop Amazon Web Services support</name>
   <description>
     This module contains code to support integration with Amazon Web Services.
