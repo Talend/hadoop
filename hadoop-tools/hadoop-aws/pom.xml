@@ -22,8 +22,8 @@
     <version>3.2.2</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
-  <artifactId>hadoop-aws</artifactId>
-  <version>3.2.2</version>
+  <artifactId>hadoop-aws-tlnd</artifactId>
+  <version>3.2.2.1</version>
   <name>Apache Hadoop Amazon Web Services support</name>
   <description>
     This module contains code to support integration with Amazon Web Services.
@@ -51,7 +51,37 @@
     <!-- Set a longer timeout for integration test (in milliseconds) -->
     <test.integration.timeout>200000</test.integration.timeout>
 
+    <!-- we only want to build the hadoop aws with some code fix, and release one patch version. For avoiding to build the whole hadoop, we use this property to decide other hadoop jar's version which use-->
+    <!-- the build command at local : mvn clean install -Denforcer.skip=true -->
+    <!-- the command in jenkins for auto deploy : mvn clean -U -V deploy -Denforcer.skip=true -->
+    <hadoop.version_for_build>3.2.2</hadoop.version_for_build>
+    <talend.nexus.url>https://artifacts-oss.talend.com</talend.nexus.url>
+    <aws-java-sdk.version>1.11.729</aws-java-sdk.version>
+
   </properties>
+
+  <distributionManagement>
+    <snapshotRepository>
+      <id>talend_nexus_deployment</id>
+      <url>${talend.nexus.url}/nexus/content/repositories/TalendOpenSourceSnapshot/</url>
+      <snapshots>
+          <enabled>true</enabled>
+      </snapshots>
+      <releases>
+          <enabled>false</enabled>
+      </releases>
+    </snapshotRepository>
+    <repository>
+      <id>talend_nexus_deployment</id>
+      <url>${talend.nexus.url}/nexus/content/repositories/TalendOpenSourceRelease/</url>
+      <snapshots>
+          <enabled>false</enabled>
+      </snapshots>
+      <releases>
+          <enabled>true</enabled>
+      </releases>
+    </repository>
+  </distributionManagement>
 
   <profiles>
     <profile>
@@ -338,6 +368,32 @@
           <effort>Max</effort>
         </configuration>
       </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-remote-resources-plugin</artifactId>
+        <version>${maven-remote-resources-plugin.version}</version>
+        <configuration>
+          <resourceBundles>
+            <resourceBundle>org.apache.hadoop:hadoop-build-tools:${hadoop.version_for_build}</resourceBundle>
+          </resourceBundles>
+        </configuration>
+        <dependencies>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-build-tools</artifactId>
+            <version>${hadoop.version_for_build}</version>
+          </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <goals>
+              <goal>process</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
@@ -397,6 +453,66 @@
           </execution>
         </executions>
       </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <createDependencyReducedPom>true</createDependencyReducedPom>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <createSourcesJar>true</createSourcesJar>
+              <shadeSourcesContent>true</shadeSourcesContent>
+              <artifactSet>
+                <includes>
+                  <include>com.amazonaws:*:jar:*</include>
+                  <include>com.fasterxml.jackson.*:*</include>
+                  <include>joda-time:joda-time:jar:*</include>
+                  <include>org.apache.httpcomponents:*:jar:*</include>
+                </includes>
+              </artifactSet>
+              <relocations>
+                <relocation>
+                  <pattern>org.apache.hadoop.fs</pattern>
+                  <shadedPattern>com.talend.shaded.org.apache.hadoop.fs</shadedPattern>
+                  <includes>
+                    <include>org.apache.hadoop.fs.s3a.*</include>
+                    <include>org.apache.hadoop.fs.s3a.auth.*</include>
+                    <include>org.apache.hadoop.fs.s3a.impl.*</include>
+                    <include>org.apache.hadoop.fs.s3a.commit.*</include>
+                    <include>org.apache.hadoop.fs.s3a.commit.files.*</include>
+                    <include>org.apache.hadoop.fs.s3a.commit.magic.*</include>
+                    <include>org.apache.hadoop.fs.s3a.commit.staging.*</include>
+                    <include>org.apache.hadoop.fs.s3a.s3guard.*</include>
+                    <include>org.apache.hadoop.fs.s3native.*</include>
+                  </includes>
+                </relocation>
+                <relocation>
+                  <pattern>com.fasterxml.jackson</pattern>
+                  <shadedPattern>com.talend.shaded.com.fasterxml.jackson</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.amazonaws</pattern>
+                  <shadedPattern>com.talend.shaded.com.amazonaws</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.http</pattern>
+                  <shadedPattern>com.talend.shaded.org.apache.http</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.joda</pattern>
+                  <shadedPattern>com.talend.shaded.org.joda</shadedPattern>
+                </relocation>
+              </relocations>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 
@@ -404,19 +520,42 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
+      <version>${hadoop.version_for_build}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
+      <version>${hadoop.version_for_build}</version>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
+
     <dependency>
       <groupId>com.amazonaws</groupId>
-      <artifactId>aws-java-sdk-bundle</artifactId>
+      <artifactId>aws-java-sdk-s3</artifactId>
+      <version>${aws-java-sdk.version}</version>
       <scope>compile</scope>
     </dependency>
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-sts</artifactId>
+      <version>${aws-java-sdk.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-dynamodb</artifactId>
+      <version>${aws-java-sdk.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-core</artifactId>
+      <version>${aws-java-sdk.version}</version>
+      <scope>compile</scope>
+    </dependency>
+
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
