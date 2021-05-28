@@ -13,4 +13,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.apache.hadoop.fs.s3native.NativeS3FileSystem
+com.talend.shaded.org.apache.hadoop.fs.s3a.S3AFileSystem
