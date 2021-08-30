@@ -54,6 +54,8 @@ public final class AzureADAuthenticator {
   private static final int CONNECT_TIMEOUT = 30 * 1000;
   private static final int READ_TIMEOUT = 30 * 1000;
 
+  private static final String SCOPE = "https://storage.azure.com/.default";
+
   private AzureADAuthenticator() {
     // no operation
   }
@@ -85,8 +87,14 @@ public final class AzureADAuthenticator {
     Preconditions.checkNotNull(clientId, "clientId");
     Preconditions.checkNotNull(clientSecret, "clientSecret");
 
+    boolean isVersion2AuthenticationEndpoint = authEndpoint.contains("/oauth2/v2.0/");
+
     QueryParams qp = new QueryParams();
-    qp.add("resource", RESOURCE_NAME);
+    if (isVersion2AuthenticationEndpoint) {
+      qp.add("scope", SCOPE);
+    } else {
+      qp.add("resource", RESOURCE_NAME);
+    }
     qp.add("grant_type", "client_credentials");
     qp.add("client_id", clientId);
     qp.add("client_secret", clientSecret);
