@@ -54,7 +54,7 @@
     <!-- we only want to build the hadoop aws with some code fix, and release one patch version. For avoiding to build the whole hadoop, we use this property to decide other hadoop jar's version which use-->
     <!-- the build command at local : mvn clean install -Denforcer.skip=true -->
     <!-- the command in jenkins for auto deploy : mvn clean -U -V deploy -Denforcer.skip=true -->
-    <hadoop.version_for_build>3.2.2</hadoop.version_for_build>
+    <hadoop.version_for_build>3.2.3</hadoop.version_for_build>
     <talend.nexus.url>https://artifacts-oss.talend.com</talend.nexus.url>
     <aws-java-sdk.version>1.12.264</aws-java-sdk.version>
 
